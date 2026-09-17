@@ -1,1 +1,8 @@
-data/
+data/*
+!data/processed/
+data/processed/*
+!data/processed/listings_features.parquet
+!data/processed/oof_predictions.parquet
+!data/raw/
+data/raw/*
+!data/raw/neighbourhoods.geojson
