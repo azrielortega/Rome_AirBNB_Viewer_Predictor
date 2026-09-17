@@ -434,6 +434,31 @@ def render_scenario_tab(listings: pd.DataFrame, oof: pd.DataFrame, model) -> Non
         st.plotly_chart(hist_fig, width="stretch")
 
 
+def render_about_tab(listings: pd.DataFrame) -> None:
+    st.markdown(
+        """
+### Where the data comes from
+
+The listings shown here come from [Inside Airbnb](http://insideairbnb.com/), an independent,
+non-commercial project that publishes snapshots of public Airbnb listing data for cities around
+the world to support research, teaching, and public discussion. It isn't operated by, or
+affiliated with, Airbnb, Inc.
+
+### What this project is
+
+This site is a personal, educational project built to practice data cleaning, feature
+engineering, and price modeling — it is **not** an official Airbnb tool, and it isn't affiliated
+with or endorsed by Airbnb, Inc. or Inside Airbnb.
+
+The price estimates on the **Scenario Predictor** tab come from a model trained on a past
+snapshot of listings, and are only meant to illustrate patterns in the data (e.g. how location or
+amenities relate to price). They don't reflect current market conditions and shouldn't be used to
+set or evaluate real prices, book a stay, or make any financial decision.
+"""
+    )
+    st.caption(f"This snapshot covers {len(listings):,} listings across Rome.")
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -450,11 +475,15 @@ def main() -> None:
     st.title("Airbnb Rome — Price Explorer & Scenario Predictor")
     render_sidebar(listings, oof)
 
-    explorer_tab, scenario_tab = st.tabs(["\U0001f5fa️ Market Explorer", "\U0001f52e Scenario Predictor"])
+    explorer_tab, scenario_tab, about_tab = st.tabs(
+        ["\U0001f5fa️ Market Explorer", "\U0001f52e Scenario Predictor", "ℹ️ About & Data"]
+    )
     with explorer_tab:
         render_market_explorer_tab(listings, oof, geojson)
     with scenario_tab:
         render_scenario_tab(listings, oof, model)
+    with about_tab:
+        render_about_tab(listings)
 
 
 if __name__ == "__main__":
