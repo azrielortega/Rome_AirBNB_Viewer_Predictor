@@ -38,8 +38,8 @@ MODEL_PATH = PROJECT_ROOT / "models/lightgbm_price_model.joblib"
 
 # Colorblind-safe categorical palette (Okabe-Ito) -- same one used throughout
 # the Phase 3/4 notebooks, kept fixed-order for room_type so a color always
-# means the same thing across every chart in this project. PALETTE[0] also
-# drives the app's theme (.streamlit/config.toml primaryColor).
+# means the same thing across every chart in this project. .streamlit/config.toml's
+# primaryColor is a lightened variant of PALETTE[0] for contrast on the dark theme.
 PALETTE = ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7"]
 ROME_CENTER = {"lat": 41.9028, "lon": 12.4964}
 MAX_MAP_POINTS = 6000
@@ -235,16 +235,16 @@ def build_map_figure(
     selected_room_types: list[str],
     price_range: tuple[int, int],
 ) -> tuple[go.Figure, int, int]:
-    if shading == "Median price (€)":
+    if shading == "Typical price (€)":
         agg = listings.groupby("neighbourhood_cleansed", observed=True)["price"].median()
-        colorscale, colorbar_title = "Blues", "Median price (€)"
+        colorscale, colorbar_title = "Blues", "Typical price (€)"
     else:
         agg = (
             oof.assign(abs_error=lambda d: d["residual"].abs())
             .groupby("neighbourhood_cleansed", observed=True)["abs_error"]
             .mean()
         )
-        colorscale, colorbar_title = "Oranges", "Mean absolute error (€)"
+        colorscale, colorbar_title = "Oranges", "How far off our estimates are (€)"
 
     fig = go.Figure()
     fig.add_trace(
@@ -295,7 +295,7 @@ def build_map_figure(
         )
 
     fig.update_layout(
-        map_style="carto-positron",
+        map_style="carto-darkmatter",
         map_zoom=10.5,
         map_center=ROME_CENTER,
         margin=dict(l=0, r=0, t=0, b=0),
@@ -312,22 +312,24 @@ def build_map_figure(
 
 def render_sidebar(listings: pd.DataFrame, oof: pd.DataFrame) -> None:
     st.sidebar.markdown("## \U0001f3db️ Airbnb Rome Explorer")
-    st.sidebar.caption("Spatially-cross-validated LightGBM price model, and its SHAP/error-diagnosis findings."
+    st.sidebar.caption(
+        "Browse real Rome listings, and get a price estimate for a place based on what similar listings charge."
     )
 
     st.sidebar.metric("Listings in dataset", f"{len(listings):,}")
     st.sidebar.metric("Neighbourhoods (Municipi)", f"{listings['neighbourhood_cleansed'].nunique()}")
 
-    with st.sidebar.expander("About the model", expanded=False):
+    with st.sidebar.expander("How accurate are these estimates?", expanded=False):
         metrics = mt.dollar_metrics(oof["price"].to_numpy(), oof["predicted_price"].to_numpy())
-        st.metric("RMSE (out-of-fold)", f"€{metrics['RMSE']:.0f}")
-        st.metric("MAE (out-of-fold)", f"€{metrics['MAE']:.0f}")
-        st.metric("MdAPE (out-of-fold)", f"{metrics['MdAPE']:.1f}%")
+        st.caption("Based on comparing estimates against real prices for listings the model hadn't seen.")
+        st.metric("Typical difference from the real price", f"€{metrics['MAE']:.0f}")
+        st.metric("Typical difference, as a percent", f"{metrics['MdAPE']:.1f}%")
+        st.metric("Difference on the trickiest listings", f"€{metrics['RMSE']:.0f}")
 
 def render_market_explorer_tab(listings: pd.DataFrame, oof: pd.DataFrame, geojson: dict) -> None:
     filt_col1, filt_col2, filt_col3 = st.columns([1.1, 1.4, 1.5])
     with filt_col1:
-        shading = st.radio("Municipio shading", ["Median price (€)", "Mean absolute error (€)"])
+        shading = st.radio("Color neighbourhoods by", ["Typical price (€)", "How far off our estimates are (€)"])
     with filt_col2:
         room_type_options = sorted(listings["room_type"].unique())
         selected_room_types = st.multiselect("Room types shown", room_type_options, default=room_type_options)
@@ -341,7 +343,7 @@ def render_market_explorer_tab(listings: pd.DataFrame, oof: pd.DataFrame, geojso
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Listings shown", f"{len(matching_preview):,}")
     kpi2.metric(
-        "Median price",
+        "Typical price",
         f"€{matching_preview['price'].median():.0f}" if len(matching_preview) else "—",
     )
     kpi3.metric("Neighbourhoods represented", f"{matching_preview['neighbourhood_cleansed'].nunique()}")
@@ -356,10 +358,9 @@ def render_market_explorer_tab(listings: pd.DataFrame, oof: pd.DataFrame, geojso
 
 def render_scenario_tab(listings: pd.DataFrame, oof: pd.DataFrame, model) -> None:
     st.caption(
-        "The point prediction comes from the saved LightGBM model; the distribution around it is "
-        "bootstrapped from out-of-fold error ratios of the closest matching real listings (error scales "
-        "with price per Phase 4's diagnosis, so this uses a multiplicative bootstrap rather than a flat "
-        "+/- range)."
+        "Pick a neighbourhood, room type, and amenities to get a price estimate, based on patterns learned "
+        "from thousands of real Rome listings. The chart shows how much prices for similar listings "
+        "typically vary, so you can see the full picture, not just a single number."
     )
 
     room_type_options = sorted(listings["room_type"].unique())
@@ -399,9 +400,9 @@ def render_scenario_tab(listings: pd.DataFrame, oof: pd.DataFrame, model) -> Non
     st.divider()
     pred_col, chart_col = st.columns([1, 2])
     with pred_col:
-        st.metric("Predicted price", f"€{point_prediction:.0f}/night")
+        st.metric("Estimated price", f"€{point_prediction:.0f}/night")
         st.metric(
-            "Bootstrapped 90% range",
+            "Typical price range for similar listings",
             f"€{np.percentile(simulated_prices, 5):.0f} – €{np.percentile(simulated_prices, 95):.0f}",
         )
         n_comparable = len(
@@ -421,13 +422,13 @@ def render_scenario_tab(listings: pd.DataFrame, oof: pd.DataFrame, model) -> Non
         )
         hist_fig.add_vline(
             x=point_prediction, line_width=2, line_color=PALETTE[3],
-            annotation_text="model prediction", annotation_position="top",
+            annotation_text="our estimate", annotation_position="top",
         )
         hist_fig.update_layout(
             height=320,
             margin=dict(l=10, r=10, t=30, b=10),
-            xaxis_title="Simulated nightly price (€)",
-            yaxis_title="draws",
+            xaxis_title="Nightly price (€)",
+            yaxis_title="How often",
             showlegend=False,
         )
         st.plotly_chart(hist_fig, width="stretch")
